@@ -1,0 +1,2 @@
+# No third-party Python packages required — only stdlib + ffmpeg binary
+pyinstaller>=6.0
