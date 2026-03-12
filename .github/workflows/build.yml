@@ -1,0 +1,105 @@
+name: Build VideoToAudioConverter
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build macOS app
+        run: |
+          FFMPEG_PATH="$(which ffmpeg)"
+          pyinstaller \
+            --noconfirm \
+            --onefile \
+            --windowed \
+            --name "VideoToAudioConverter" \
+            --add-binary "$FFMPEG_PATH:." \
+            --hidden-import tkinter \
+            --hidden-import tkinter.ttk \
+            --hidden-import tkinter.filedialog \
+            --hidden-import tkinter.messagebox \
+            --osx-bundle-identifier "com.yourname.videotoaudio" \
+            main.py
+
+      - name: Zip the app bundle
+        run: |
+          cd dist
+          zip -r VideoToAudioConverter-macOS.zip VideoToAudioConverter.app
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoToAudioConverter-macOS
+          path: dist/VideoToAudioConverter-macOS.zip
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg via chocolatey
+        run: choco install ffmpeg -y
+        shell: pwsh
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build Windows exe
+        shell: pwsh
+        run: |
+          $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+          if (-not $ffmpeg) {
+            $ffmpeg = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
+          }
+          if (-not (Test-Path $ffmpeg)) {
+            Write-Error "ffmpeg.exe not found"
+            exit 1
+          }
+          Write-Host "Using ffmpeg: $ffmpeg"
+          pyinstaller `
+            --noconfirm `
+            --onefile `
+            --windowed `
+            --name "VideoToAudioConverter" `
+            "--add-binary=$ffmpeg;." `
+            --hidden-import tkinter `
+            --hidden-import tkinter.ttk `
+            --hidden-import tkinter.filedialog `
+            --hidden-import tkinter.messagebox `
+            main.py
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoToAudioConverter-Windows
+          path: dist\VideoToAudioConverter.exe
+          retention-days: 30
