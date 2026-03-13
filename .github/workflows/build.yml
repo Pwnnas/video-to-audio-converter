@@ -31,11 +31,10 @@ jobs:
 
       - name: Copy ffmpeg next to source files
         run: |
-          FFMPEG_PATH="$(which ffmpeg)"
+          FFMPEG_PATH="/opt/homebrew/Cellar/ffmpeg/8.0.1_4"
           echo "Found ffmpeg at: $FFMPEG_PATH"
           echo "ffmpeg size: $(du -sh $FFMPEG_PATH)"
 
-          # Copy ffmpeg right next to main.py
           cp "$FFMPEG_PATH" ./ffmpeg
           chmod +x ./ffmpeg
 
@@ -45,7 +44,6 @@ jobs:
 
       - name: Build macOS app
         run: |
-          # Confirm ffmpeg is here
           if [ ! -f "./ffmpeg" ]; then
             echo "ERROR: ffmpeg not found in working directory"
             exit 1
@@ -72,10 +70,10 @@ jobs:
           echo "App size: $SIZE"
           echo "=========================================="
           if [ "$SIZE_MB" -lt 20 ]; then
-            echo "WARNING: App seems too small - ffmpeg may not have been bundled"
+            echo "ERROR: App is too small - ffmpeg was not bundled correctly"
             exit 1
           else
-            echo "Size looks good - ffmpeg was likely bundled correctly"
+            echo "Size looks good - ffmpeg was bundled correctly"
           fi
 
       - name: Zip the app bundle
@@ -110,62 +108,86 @@ jobs:
         shell: pwsh
         run: |
           choco install ffmpeg -y
-          # Refresh PATH in this step so we can verify
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          Write-Host "Verifying ffmpeg after install:"
-          ffmpeg -version
 
-      - name: Copy ffmpeg next to source files
+      - name: Find REAL ffmpeg binary and copy it locally
         shell: pwsh
         run: |
-          # Refresh PATH
-          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          Write-Host "Searching for real ffmpeg binary (not the choco shim)..."
+          Write-Host ""
 
-          # Try PATH first
-          $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
-
-          # Known Chocolatey locations as fallback
-          if (-not $ffmpeg) {
-            $candidates = @(
-              "C:\ProgramData\chocolatey\bin\ffmpeg.exe",
-              "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg\bin\ffmpeg.exe",
-              "C:\tools\ffmpeg\bin\ffmpeg.exe"
-            )
-            foreach ($c in $candidates) {
-              if (Test-Path $c) {
-                $ffmpeg = $c
-                break
-              }
+          # The shim is tiny (~0.3mb) - we need the real binary
+          # Chocolatey deploys the real ffmpeg under lib\ffmpeg\tools
+          # Search recursively under the choco lib folder
+          $chocoLib = "C:\ProgramData\chocolatey\lib\ffmpeg"
+          
+          Write-Host "Listing chocolatey ffmpeg lib folder:"
+          if (Test-Path $chocoLib) {
+            Get-ChildItem $chocoLib -Recurse -Filter "ffmpeg.exe" | ForEach-Object {
+              Write-Host "  Found: $($_.FullName)  |  Size: $($_.Length / 1MB) MB"
             }
+          } else {
+            Write-Host "Folder not found: $chocoLib"
           }
 
-          if (-not $ffmpeg) {
-            Write-Error "Could not find ffmpeg.exe anywhere"
+          # Find all ffmpeg.exe files and pick the biggest one (the real binary)
+          $allCandidates = @()
+
+          # Check choco lib path
+          if (Test-Path $chocoLib) {
+            $found = Get-ChildItem $chocoLib -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue
+            $allCandidates += $found
+          }
+
+          # Also check tools folder
+          $chocoTools = "C:\tools\ffmpeg"
+          if (Test-Path $chocoTools) {
+            $found = Get-ChildItem $chocoTools -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue
+            $allCandidates += $found
+          }
+
+          if ($allCandidates.Count -eq 0) {
+            Write-Error "No ffmpeg.exe found in chocolatey lib or tools folders"
             exit 1
           }
 
-          Write-Host "Found ffmpeg at: $ffmpeg"
-          Write-Host "ffmpeg size: $((Get-Item $ffmpeg).Length / 1MB) MB"
+          # Sort by size descending and take the largest — that is the real binary
+          $realFfmpeg = $allCandidates | Sort-Object Length -Descending | Select-Object -First 1
 
-          # Copy ffmpeg.exe right next to main.py
-          Copy-Item $ffmpeg -Destination ".\ffmpeg.exe"
-          Write-Host "Copied ffmpeg.exe to working directory"
-          Write-Host "Local copy size: $((Get-Item '.\ffmpeg.exe').Length / 1MB) MB"
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "Selected real ffmpeg: $($realFfmpeg.FullName)"
+          Write-Host "Size: $($realFfmpeg.Length / 1MB) MB"
+          Write-Host "=========================================="
 
-          # List directory to confirm
-          Get-ChildItem -Name "*.exe", "*.py"
+          if ($realFfmpeg.Length -lt 10MB) {
+            Write-Error "Selected ffmpeg is still too small ($($realFfmpeg.Length / 1MB) MB) - may still be a shim"
+            exit 1
+          }
+
+          # Copy real ffmpeg.exe next to main.py
+          Copy-Item $realFfmpeg.FullName -Destination ".\ffmpeg.exe"
+          Write-Host "Copied real ffmpeg.exe to working directory"
+          Write-Host "Confirmed local size: $((Get-Item '.\ffmpeg.exe').Length / 1MB) MB"
+
+          # Verify it actually runs
+          Write-Host ""
+          Write-Host "Verifying binary runs:"
+          .\ffmpeg.exe -version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ffmpeg.exe found but failed to execute"
+            exit 1
+          }
 
       - name: Build Windows exe
         shell: pwsh
         run: |
-          # Confirm ffmpeg.exe is here
           if (-not (Test-Path ".\ffmpeg.exe")) {
             Write-Error "ffmpeg.exe not found in working directory"
             exit 1
           }
 
           $ffmpegSize = (Get-Item ".\ffmpeg.exe").Length / 1MB
-          Write-Host "ffmpeg.exe size: $ffmpegSize MB"
+          Write-Host "Building with ffmpeg.exe ($ffmpegSize MB)"
 
           python -m PyInstaller `
             --noconfirm `
@@ -186,10 +208,12 @@ jobs:
             Write-Error "EXE was not created"
             exit 1
           }
+
           $size = (Get-Item "dist\VideoToAudioConverter.exe").Length / 1MB
           Write-Host "=========================================="
           Write-Host "EXE size: $size MB"
           Write-Host "=========================================="
+
           if ($size -lt 20) {
             Write-Error "EXE is too small ($size MB) - ffmpeg was not bundled correctly"
             exit 1
