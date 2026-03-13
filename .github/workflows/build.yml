@@ -29,16 +29,34 @@ jobs:
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Build macOS app
+      - name: Copy ffmpeg next to source files
         run: |
           FFMPEG_PATH="$(which ffmpeg)"
-          echo "Using ffmpeg at: $FFMPEG_PATH"
-          pyinstaller \
+          echo "Found ffmpeg at: $FFMPEG_PATH"
+          echo "ffmpeg size: $(du -sh $FFMPEG_PATH)"
+
+          # Copy ffmpeg right next to main.py
+          cp "$FFMPEG_PATH" ./ffmpeg
+          chmod +x ./ffmpeg
+
+          echo "Copied ffmpeg to working directory"
+          echo "Local ffmpeg size: $(du -sh ./ffmpeg)"
+          ls -lah ./ffmpeg
+
+      - name: Build macOS app
+        run: |
+          # Confirm ffmpeg is here
+          if [ ! -f "./ffmpeg" ]; then
+            echo "ERROR: ffmpeg not found in working directory"
+            exit 1
+          fi
+
+          python -m PyInstaller \
             --noconfirm \
             --onefile \
             --windowed \
             --name "VideoToAudioConverter" \
-            --add-binary "$FFMPEG_PATH:." \
+            --add-binary "ffmpeg:." \
             --hidden-import tkinter \
             --hidden-import tkinter.ttk \
             --hidden-import tkinter.filedialog \
@@ -46,10 +64,25 @@ jobs:
             --osx-bundle-identifier "com.yourname.videotoaudio" \
             main.py
 
+      - name: Verify app size
+        run: |
+          SIZE=$(du -sh dist/VideoToAudioConverter.app)
+          SIZE_MB=$(du -sm dist/VideoToAudioConverter.app | cut -f1)
+          echo "=========================================="
+          echo "App size: $SIZE"
+          echo "=========================================="
+          if [ "$SIZE_MB" -lt 20 ]; then
+            echo "WARNING: App seems too small - ffmpeg may not have been bundled"
+            exit 1
+          else
+            echo "Size looks good - ffmpeg was likely bundled correctly"
+          fi
+
       - name: Zip the app bundle
         run: |
           cd dist
           zip -r VideoToAudioConverter-macOS.zip VideoToAudioConverter.app
+          echo "Zip size: $(du -sh VideoToAudioConverter-macOS.zip)"
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -70,18 +103,22 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install ffmpeg via chocolatey
-        run: choco install ffmpeg -y
-        shell: pwsh
-
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Find ffmpeg path
-        id: ffmpeg
+      - name: Install ffmpeg via chocolatey
         shell: pwsh
         run: |
-          # Refresh PATH to pick up chocolatey install
+          choco install ffmpeg -y
+          # Refresh PATH in this step so we can verify
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          Write-Host "Verifying ffmpeg after install:"
+          ffmpeg -version
+
+      - name: Copy ffmpeg next to source files
+        shell: pwsh
+        run: |
+          # Refresh PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
           # Try PATH first
@@ -103,41 +140,62 @@ jobs:
           }
 
           if (-not $ffmpeg) {
-            Write-Error "ffmpeg.exe could not be found"
+            Write-Error "Could not find ffmpeg.exe anywhere"
             exit 1
           }
 
           Write-Host "Found ffmpeg at: $ffmpeg"
+          Write-Host "ffmpeg size: $((Get-Item $ffmpeg).Length / 1MB) MB"
 
-          # Verify it runs
-          & $ffmpeg -version
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "ffmpeg found but failed to run"
-            exit 1
-          }
+          # Copy ffmpeg.exe right next to main.py
+          Copy-Item $ffmpeg -Destination ".\ffmpeg.exe"
+          Write-Host "Copied ffmpeg.exe to working directory"
+          Write-Host "Local copy size: $((Get-Item '.\ffmpeg.exe').Length / 1MB) MB"
 
-          # Save path as a step output for the next step
-          echo "path=$ffmpeg" >> $env:GITHUB_OUTPUT
+          # List directory to confirm
+          Get-ChildItem -Name "*.exe", "*.py"
 
       - name: Build Windows exe
         shell: pwsh
         run: |
-          # Use the ffmpeg path found in the previous step
-          $ffmpeg = "${{ steps.ffmpeg.outputs.path }}"
-          Write-Host "Building with ffmpeg: $ffmpeg"
+          # Confirm ffmpeg.exe is here
+          if (-not (Test-Path ".\ffmpeg.exe")) {
+            Write-Error "ffmpeg.exe not found in working directory"
+            exit 1
+          }
 
-          # Use python -m pyinstaller to avoid PATH issues entirely
+          $ffmpegSize = (Get-Item ".\ffmpeg.exe").Length / 1MB
+          Write-Host "ffmpeg.exe size: $ffmpegSize MB"
+
           python -m PyInstaller `
             --noconfirm `
             --onefile `
             --windowed `
             --name "VideoToAudioConverter" `
-            "--add-binary=$ffmpeg;." `
+            --add-binary "ffmpeg.exe;." `
             --hidden-import tkinter `
             --hidden-import tkinter.ttk `
             --hidden-import tkinter.filedialog `
             --hidden-import tkinter.messagebox `
             main.py
+
+      - name: Verify exe size
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\VideoToAudioConverter.exe")) {
+            Write-Error "EXE was not created"
+            exit 1
+          }
+          $size = (Get-Item "dist\VideoToAudioConverter.exe").Length / 1MB
+          Write-Host "=========================================="
+          Write-Host "EXE size: $size MB"
+          Write-Host "=========================================="
+          if ($size -lt 20) {
+            Write-Error "EXE is too small ($size MB) - ffmpeg was not bundled correctly"
+            exit 1
+          } else {
+            Write-Host "Size looks good - ffmpeg was bundled correctly"
+          }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
