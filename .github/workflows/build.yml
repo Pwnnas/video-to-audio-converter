@@ -31,7 +31,7 @@ jobs:
 
       - name: Copy ffmpeg next to source files
         run: |
-          FFMPEG_PATH="/opt/homebrew/Cellar/ffmpeg/8.0.1_4"
+          FFMPEG_PATH="/opt/homebrew/Cellar/ffmpeg/8.0.1_4/"
           echo "Found ffmpeg at: $FFMPEG_PATH"
           echo "ffmpeg size: $(du -sh $FFMPEG_PATH)"
 
