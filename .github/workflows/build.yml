@@ -10,7 +10,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-
   build-macos:
     runs-on: macos-latest
 
@@ -32,13 +31,10 @@ jobs:
       - name: Copy ffmpeg next to source files
         run: |
           FFMPEG_PATH="/opt/homebrew/Cellar/ffmpeg/8.0.1_4/bin/ffmpeg"
-	      cp "$FFMPEG_PATH" ./ffmpeg
+          cp "$FFMPEG_PATH" ./ffmpeg
           chmod +x ./ffmpeg
           echo "Found ffmpeg at: $FFMPEG_PATH"
           echo "ffmpeg size: $(du -sh $FFMPEG_PATH)"
-
-
-
           echo "Copied ffmpeg to working directory"
           echo "Local ffmpeg size: $(du -sh ./ffmpeg)"
           ls -lah ./ffmpeg
