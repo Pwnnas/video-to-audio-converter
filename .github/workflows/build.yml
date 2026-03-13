@@ -23,81 +23,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install ffmpeg
-        run: brew install ffmpeg
-
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Find real ffmpeg binary and copy it locally
+      - name: Download static ffmpeg for macOS arm64
         run: |
-          echo "Searching for real ffmpeg binary (not the brew stub)..."
-          echo ""
+          echo "Downloading static ffmpeg build..."
 
-          # Show what 'which' gives us
-          WHICH_FFMPEG="$(which ffmpeg)"
-          echo "which ffmpeg: $WHICH_FFMPEG"
-          echo "which ffmpeg size: $(du -sh $WHICH_FFMPEG)"
-          echo ""
+          # Static ffmpeg build from evermeet.cx - single self-contained binary
+          # This is a trusted source used by many projects
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o ffmpeg.zip
 
-          # The real binary lives inside the Homebrew Cellar
-          # Search for the biggest ffmpeg binary under the Cellar
-          echo "Searching Homebrew Cellar for real ffmpeg binary:"
-          find /opt/homebrew/Cellar/ffmpeg -name "ffmpeg" -type f 2>/dev/null | while read f; do
-            echo "  Found: $f  |  Size: $(du -sh $f)"
-          done
-          echo ""
+          echo "Downloaded zip size: $(du -sh ffmpeg.zip)"
 
-          # Also check older Intel Homebrew path just in case
-          find /usr/local/Cellar/ffmpeg -name "ffmpeg" -type f 2>/dev/null | while read f; do
-            echo "  Found (Intel): $f  |  Size: $(du -sh $f)"
-          done
-
-          # Pick the largest ffmpeg binary from the Cellar
-          REAL_FFMPEG=$(find /opt/homebrew/Cellar/ffmpeg -name "ffmpeg" -type f 2>/dev/null \
-            | xargs ls -S 2>/dev/null \
-            | head -1)
-
-          # Fallback to Intel path
-          if [ -z "$REAL_FFMPEG" ]; then
-            REAL_FFMPEG=$(find /usr/local/Cellar/ffmpeg -name "ffmpeg" -type f 2>/dev/null \
-              | xargs ls -S 2>/dev/null \
-              | head -1)
-          fi
-
-          # Fallback to resolving the symlink manually
-          if [ -z "$REAL_FFMPEG" ]; then
-            echo "Cellar search failed, trying to resolve symlink..."
-            REAL_FFMPEG="$(realpath $WHICH_FFMPEG 2>/dev/null || readlink -f $WHICH_FFMPEG 2>/dev/null)"
-            echo "Resolved symlink to: $REAL_FFMPEG"
-          fi
-
-          if [ -z "$REAL_FFMPEG" ]; then
-            echo "ERROR: Could not find real ffmpeg binary"
-            exit 1
-          fi
-
-          FFMPEG_SIZE=$(du -sm "$REAL_FFMPEG" | cut -f1)
-          echo "=========================================="
-          echo "Selected real ffmpeg: $REAL_FFMPEG"
-          echo "Size: $(du -sh $REAL_FFMPEG)"
-          echo "=========================================="
-
-          if [ "$FFMPEG_SIZE" -lt 10 ]; then
-            echo "ERROR: Selected ffmpeg is still too small (${FFMPEG_SIZE}MB) - may still be a stub"
-            exit 1
-          fi
-
-          # Copy real ffmpeg next to main.py
-          cp "$REAL_FFMPEG" ./ffmpeg
-          chmod +x ./ffmpeg
+          unzip -o ffmpeg.zip
+          chmod +x ffmpeg
 
           echo ""
-          echo "Copied real ffmpeg to working directory"
-          echo "Confirmed local size: $(du -sh ./ffmpeg)"
-          ls -lah ./ffmpeg
+          echo "Extracted ffmpeg size: $(du -sh ffmpeg)"
+          ls -lah ffmpeg
 
-          # Verify it actually runs
           echo ""
           echo "Verifying binary runs:"
           ./ffmpeg -version
@@ -167,41 +112,40 @@ jobs:
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Install ffmpeg via chocolatey
-        shell: pwsh
-        run: choco install ffmpeg -y
-
-      - name: Find real ffmpeg binary and copy it locally
+      - name: Download static ffmpeg for Windows
         shell: pwsh
         run: |
-          Write-Host "Searching for real ffmpeg binary (not the choco shim)..."
-          Write-Host ""
+          Write-Host "Downloading static ffmpeg build for Windows..."
 
-          # List everything found under choco lib
-          $chocoLib = "C:\ProgramData\chocolatey\lib\ffmpeg"
-          Write-Host "Listing chocolatey ffmpeg lib folder:"
-          if (Test-Path $chocoLib) {
-            Get-ChildItem $chocoLib -Recurse -Filter "ffmpeg.exe" | ForEach-Object {
-              Write-Host "  Found: $($_.FullName)  |  Size: $($_.Length / 1MB) MB"
-            }
+          # Static ffmpeg build from gyan.dev - the most trusted Windows ffmpeg source
+          # This is a single static exe with no dependencies
+          $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          $zipPath = "ffmpeg-windows.zip"
+
+          Write-Host "Downloading from: $url"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath
+
+          $zipSize = (Get-Item $zipPath).Length / 1MB
+          Write-Host "Downloaded zip size: $zipSize MB"
+
+          # Extract the zip
+          Write-Host "Extracting..."
+          Expand-Archive -Path $zipPath -DestinationPath "ffmpeg-extracted" -Force
+
+          # Find ffmpeg.exe inside the extracted folder
+          Write-Host "Searching for ffmpeg.exe in extracted files:"
+          $allFfmpeg = Get-ChildItem "ffmpeg-extracted" -Recurse -Filter "ffmpeg.exe"
+          $allFfmpeg | ForEach-Object {
+            Write-Host "  Found: $($_.FullName)  |  Size: $($_.Length / 1MB) MB"
           }
 
-          # Collect all candidates
-          $allCandidates = @()
-          if (Test-Path $chocoLib) {
-            $allCandidates += Get-ChildItem $chocoLib -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue
-          }
-          if (Test-Path "C:\tools\ffmpeg") {
-            $allCandidates += Get-ChildItem "C:\tools\ffmpeg" -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue
-          }
+          # Pick the largest one
+          $realFfmpeg = $allFfmpeg | Sort-Object Length -Descending | Select-Object -First 1
 
-          if ($allCandidates.Count -eq 0) {
-            Write-Error "No ffmpeg.exe found in chocolatey lib or tools folders"
+          if (-not $realFfmpeg) {
+            Write-Error "ffmpeg.exe not found in extracted zip"
             exit 1
           }
-
-          # Pick the largest one - that is the real binary
-          $realFfmpeg = $allCandidates | Sort-Object Length -Descending | Select-Object -First 1
 
           Write-Host ""
           Write-Host "=========================================="
@@ -209,20 +153,17 @@ jobs:
           Write-Host "Size: $($realFfmpeg.Length / 1MB) MB"
           Write-Host "=========================================="
 
-          if ($realFfmpeg.Length -lt 10MB) {
-            Write-Error "Still too small ($($realFfmpeg.Length / 1MB) MB) - may still be a shim"
-            exit 1
-          }
-
+          # Copy next to main.py
           Copy-Item $realFfmpeg.FullName -Destination ".\ffmpeg.exe"
-          Write-Host "Copied real ffmpeg.exe to working directory"
-          Write-Host "Confirmed local size: $((Get-Item '.\ffmpeg.exe').Length / 1MB) MB"
+          Write-Host "Copied to working directory"
+          Write-Host "Confirmed size: $((Get-Item '.\ffmpeg.exe').Length / 1MB) MB"
 
+          # Verify it runs
           Write-Host ""
           Write-Host "Verifying binary runs:"
           .\ffmpeg.exe -version
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "ffmpeg.exe found but failed to execute"
+            Write-Error "ffmpeg.exe failed to run"
             exit 1
           }
 
