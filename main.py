@@ -19,9 +19,9 @@ class VideoToAudioApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Video to Audio Converter")
-        self.root.geometry("700x580")
+        self.root.geometry("800x740")
         self.root.resizable(True, True)
-        self.root.minsize(580, 480)
+        self.root.minsize(640, 580)
 
         # Platform-aware styling
         self.style = ttk.Style()
@@ -51,17 +51,17 @@ class VideoToAudioApp:
     def _configure_styles(self):
         """Extra style tweaks that work cross-platform."""
         if sys.platform == "win32":
-            self.style.configure("TLabel", font=("Segoe UI", 10))
-            self.style.configure("TButton", font=("Segoe UI", 10))
-            self.style.configure("TCheckbutton", font=("Segoe UI", 10))
-            self.style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+            self.style.configure("TLabel", font=("Segoe UI", 13))
+            self.style.configure("TButton", font=("Segoe UI", 15))
+            self.style.configure("TCheckbutton", font=("Segoe UI", 15))
+            self.style.configure("TLabelframe.Label", font=("Segoe UI", 13, "bold"))
         elif sys.platform == "darwin":
-            self.style.configure("TLabel", font=("SF Pro Text", 12))
-            self.style.configure("TButton", font=("SF Pro Text", 12))
-            self.style.configure("TCheckbutton", font=("SF Pro Text", 12))
+            self.style.configure("TLabel", font=("SF Pro Text", 14))
+            self.style.configure("TButton", font=("SF Pro Text", 14))
+            self.style.configure("TCheckbutton", font=("SF Pro Text", 14))
         else:
-            self.style.configure("TLabel", font=("Helvetica", 10))
-            self.style.configure("TButton", font=("Helvetica", 10))
+            self.style.configure("TLabel", font=("Helvetica", 15))
+            self.style.configure("TButton", font=("Helvetica", 15))
 
     # ------------------------------------------------------------------ #
     #  UI construction                                                     #
@@ -71,15 +71,15 @@ class VideoToAudioApp:
         """Build all UI widgets."""
 
         # ── Title bar ─────────────────────────────────────────────────── #
-        top_frame = ttk.Frame(self.root, padding=(12, 10, 12, 4))
+        top_frame = ttk.Frame(self.root, padding=(14, 10, 12, 4))
         top_frame.pack(fill=tk.X)
 
         title_font = (
-            ("SF Pro Display", 18, "bold")
+            ("SF Pro Display", 16, "bold")
             if sys.platform == "darwin"
             else ("Segoe UI", 16, "bold")
             if sys.platform == "win32"
-            else ("Helvetica", 15, "bold")
+            else ("Helvetica", 16, "bold")
         )
         ttk.Label(top_frame, text="🎬  Video → M4A Converter", font=title_font).pack(
             side=tk.LEFT
@@ -90,23 +90,23 @@ class VideoToAudioApp:
         )
         self.ffmpeg_status_label.pack(side=tk.RIGHT, padx=4)
 
-        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=12)
+        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=14)
 
         # ── File list ─────────────────────────────────────────────────── #
         list_frame = ttk.LabelFrame(
-            self.root, text="Video Files", padding=(10, 6)
+            self.root, text="Video Files", padding=(14, 6)
         )
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 4))
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(9, 4))
 
         scroll_y = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
         scroll_x = ttk.Scrollbar(list_frame, orient=tk.HORIZONTAL)
 
         list_font = (
-            ("Courier New", 11)
+            ("Courier New", 13)
             if sys.platform == "win32"
-            else ("Menlo", 11)
+            else ("Menlo", 14)
             if sys.platform == "darwin"
-            else ("Monospace", 10)
+            else ("Monospace", 14)
         )
 
         self.file_listbox = tk.Listbox(
@@ -134,14 +134,14 @@ class VideoToAudioApp:
             list_frame,
             text="Click  ➕ Add Files  to get started",
             foreground="#aaaaaa",
-            font=("Segoe UI", 11, "italic")
+            font=("Segoe UI", 12, "italic")
             if sys.platform == "win32"
-            else ("Helvetica", 11, "italic"),
+            else ("Helvetica", 12, "italic"),
         )
         self.hint_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
         # ── File-action buttons ───────────────────────────────────────── #
-        btn_frame = ttk.Frame(self.root, padding=(12, 2))
+        btn_frame = ttk.Frame(self.root, padding=(14, 3))
         btn_frame.pack(fill=tk.X)
 
         ttk.Button(
@@ -159,9 +159,9 @@ class VideoToAudioApp:
 
         # ── Output directory ──────────────────────────────────────────── #
         out_frame = ttk.LabelFrame(
-            self.root, text="Output Directory", padding=(10, 6)
+            self.root, text="Output Directory", padding=(12, 6)
         )
-        out_frame.pack(fill=tk.X, padx=12, pady=(6, 4))
+        out_frame.pack(fill=tk.X, padx=14, pady=(6, 4))
 
         out_row = ttk.Frame(out_frame)
         out_row.pack(fill=tk.X)
@@ -170,9 +170,9 @@ class VideoToAudioApp:
             out_row,
             textvariable=self.output_dir,
             state="readonly",
-            font=("Segoe UI", 10)
+            font=("Segoe UI", 12)
             if sys.platform == "win32"
-            else ("Helvetica", 11),
+            else ("Helvetica", 12),
         )
         self.out_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
@@ -190,7 +190,7 @@ class VideoToAudioApp:
         self._toggle_output_dir()
 
         # ── Options ───────────────────────────────────────────────────── #
-        opt_frame = ttk.LabelFrame(self.root, text="Options", padding=(10, 6))
+        opt_frame = ttk.LabelFrame(self.root, text="Options", padding=(12, 6))
         opt_frame.pack(fill=tk.X, padx=12, pady=(0, 6))
 
         opt_row = ttk.Frame(opt_frame)
@@ -215,7 +215,7 @@ class VideoToAudioApp:
         ).pack(side=tk.LEFT)
 
         # ── Progress ──────────────────────────────────────────────────── #
-        prog_frame = ttk.Frame(self.root, padding=(12, 0, 12, 0))
+        prog_frame = ttk.Frame(self.root, padding=(14, 0, 12, 0))
         prog_frame.pack(fill=tk.X)
 
         self.progress_var = tk.DoubleVar(value=0)
@@ -235,7 +235,7 @@ class VideoToAudioApp:
         self.status_label.pack(anchor=tk.W)
 
         # ── Convert button ────────────────────────────────────────────── #
-        bottom_frame = ttk.Frame(self.root, padding=(12, 4, 12, 12))
+        bottom_frame = ttk.Frame(self.root, padding=(14, 4, 12, 14))
         bottom_frame.pack(fill=tk.X)
 
         self.convert_btn = ttk.Button(
