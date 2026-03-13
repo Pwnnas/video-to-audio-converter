@@ -32,6 +32,7 @@ jobs:
       - name: Build macOS app
         run: |
           FFMPEG_PATH="$(which ffmpeg)"
+          echo "Using ffmpeg at: $FFMPEG_PATH"
           pyinstaller \
             --noconfirm \
             --onefile \
@@ -76,18 +77,46 @@ jobs:
       - name: Install PyInstaller
         run: pip install pyinstaller
 
-      - name: Build Windows exe
+      - name: Find ffmpeg and build exe
         shell: pwsh
         run: |
+          # Refresh PATH so choco installs are visible
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+          # Try PATH first
           $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+
+          # Known Chocolatey locations as fallback
           if (-not $ffmpeg) {
-            $ffmpeg = "C:\ProgramData\chocolatey\bin\ffmpeg.exe"
+            $candidates = @(
+              "C:\ProgramData\chocolatey\bin\ffmpeg.exe",
+              "C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg\bin\ffmpeg.exe",
+              "C:\tools\ffmpeg\bin\ffmpeg.exe"
+            )
+            foreach ($c in $candidates) {
+              if (Test-Path $c) {
+                $ffmpeg = $c
+                break
+              }
+            }
           }
-          if (-not (Test-Path $ffmpeg)) {
-            Write-Error "ffmpeg.exe not found"
+
+          if (-not $ffmpeg) {
+            Write-Error "ffmpeg.exe could not be found after install. Searched PATH and known Chocolatey paths."
             exit 1
           }
-          Write-Host "Using ffmpeg: $ffmpeg"
+
+          Write-Host "=========================================="
+          Write-Host "Found ffmpeg at: $ffmpeg"
+          Write-Host "=========================================="
+
+          # Verify it actually runs
+          & $ffmpeg -version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ffmpeg found but failed to run"
+            exit 1
+          }
+
           pyinstaller `
             --noconfirm `
             --onefile `
