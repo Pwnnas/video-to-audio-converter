@@ -4,7 +4,11 @@
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[('C:\\Users\\edvin\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-N-121938-g2456a39581-win64-gpl\\bin\\ffmpeg.exe', '.')],
+    # To bundle ffmpeg with the executable, set FFMPEG_BIN to the ffmpeg binary path
+    # and uncomment the line below. Otherwise, users must have ffmpeg in their PATH.
+    # Example (Windows): binaries=[('C:/path/to/ffmpeg.exe', '.')]
+    # Example (macOS):   binaries=[('/opt/homebrew/bin/ffmpeg', '.')]
+    binaries=[],
     datas=[],
     hiddenimports=['tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox'],
     hookspath=[],
