@@ -1,0 +1,5 @@
+# Runtime dependency
+tkinterdnd2>=0.4.0
+
+# Build dependency (only needed to create standalone executables)
+pyinstaller>=6.0
