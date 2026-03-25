@@ -134,9 +134,9 @@ class VideoToAudioApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Video to Audio Converter")
-        self.root.geometry("820x760")
+        self.root.geometry("1060x880")
         self.root.resizable(True, True)
-        self.root.minsize(660, 600)
+        self.root.minsize(820, 680)
 
         if sys.platform == "darwin":
             self._platform_theme = "aqua"
@@ -152,7 +152,7 @@ class VideoToAudioApp:
         self.files: list[str] = []
         self.output_dir = tk.StringVar()
         self.is_converting = False
-        self.dark_mode = tk.BooleanVar(value=False)
+        self.dark_mode = tk.BooleanVar(value=True)
 
         # Widgets that need colour updates on theme switch
         self._header_widgets: list[tk.Widget] = []
@@ -184,14 +184,14 @@ class VideoToAudioApp:
 
         # Section title row
         title_row = tk.Frame(inner, bg=c["card_bg"])
-        title_row.pack(fill=tk.X, padx=14, pady=(10, 4))
+        title_row.pack(fill=tk.X, padx=16, pady=(14, 6))
         lbl = tk.Label(title_row, text=title, bg=c["card_bg"], fg=c["muted"],
-                       font=(UI_FONT, 11, "bold"))
+                       font=(UI_FONT, 12, "bold"))
         lbl.pack(side=tk.LEFT)
 
         # Content frame
         body = tk.Frame(inner, bg=c["card_bg"])
-        body.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 12))
+        body.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 14))
 
         self._card_frames.extend([outer, inner, title_row, lbl, body])
         return body, outer, lbl
@@ -201,7 +201,7 @@ class VideoToAudioApp:
     # ------------------------------------------------------------------ #
 
     def _build_ui(self):
-        c = LIGHT  # initial colours (theme not applied yet)
+        c = DARK  # start with dark (matches default dark_mode=True)
 
         # ── Header banner ─────────────────────────────────────────────── #
         self.header_frame = tk.Frame(self.root, bg=c["header_bg"], pady=0)
@@ -209,13 +209,13 @@ class VideoToAudioApp:
 
         # Left: icon + title + subtitle
         left_hdr = tk.Frame(self.header_frame, bg=c["header_bg"])
-        left_hdr.pack(side=tk.LEFT, padx=(18, 0), pady=14)
+        left_hdr.pack(side=tk.LEFT, padx=(22, 0), pady=20)
 
         self.header_title = tk.Label(
             left_hdr,
             text="🎬  Video to Audio Converter",
             bg=c["header_bg"], fg=c["header_fg"],
-            font=(DISPLAY_FONT, 17, "bold"),
+            font=(DISPLAY_FONT, 22, "bold"),
         )
         self.header_title.pack(anchor=tk.W)
 
@@ -223,13 +223,13 @@ class VideoToAudioApp:
             left_hdr,
             text="Extract audio from any video file",
             bg=c["header_bg"], fg=c["header_sub"],
-            font=(UI_FONT, 11),
+            font=(UI_FONT, 13),
         )
-        self.header_sub.pack(anchor=tk.W)
+        self.header_sub.pack(anchor=tk.W, pady=(2, 0))
 
         # Right: dark mode toggle + ffmpeg badge
         right_hdr = tk.Frame(self.header_frame, bg=c["header_bg"])
-        right_hdr.pack(side=tk.RIGHT, padx=(0, 18))
+        right_hdr.pack(side=tk.RIGHT, padx=(0, 22))
 
         self.dark_toggle = tk.Button(
             right_hdr,
@@ -238,15 +238,15 @@ class VideoToAudioApp:
             bg=c["header_bg"], fg=c["header_fg"],
             activebackground=c["header_bg"], activeforeground=c["header_fg"],
             relief=tk.FLAT, bd=0, cursor="hand2",
-            font=(UI_FONT, 11),
-            padx=10, pady=6,
+            font=(UI_FONT, 13),
+            padx=12, pady=8,
         )
-        self.dark_toggle.pack(side=tk.LEFT, padx=(0, 8))
+        self.dark_toggle.pack(side=tk.LEFT, padx=(0, 10))
 
         self.ffmpeg_status_label = tk.Label(
             right_hdr, text="",
             bg=c["header_bg"], fg=c["header_sub"],
-            font=(UI_FONT, 11),
+            font=(UI_FONT, 13),
         )
         self.ffmpeg_status_label.pack(side=tk.LEFT)
 
@@ -266,7 +266,7 @@ class VideoToAudioApp:
         )
 
         # Listbox + scrollbars
-        lb_frame = tk.Frame(list_body, bg=LIGHT["card_bg"])
+        lb_frame = tk.Frame(list_body, bg=c["card_bg"])
         lb_frame.pack(fill=tk.BOTH, expand=True)
 
         scroll_y = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
@@ -278,7 +278,7 @@ class VideoToAudioApp:
             yscrollcommand=scroll_y.set,
             xscrollcommand=scroll_x.set,
             activestyle="none",
-            font=(MONO_FONT, 12),
+            font=(MONO_FONT, 13),
             bg=c["listbox_bg"], fg=c["listbox_fg"],
             selectbackground=c["select_bg"], selectforeground=c["select_fg"],
             bd=0, highlightthickness=0,
@@ -305,19 +305,19 @@ class VideoToAudioApp:
             lb_frame,
             text=hint_text,
             bg=c["card_bg"], fg=c["hint"],
-            font=(UI_FONT, 12, "italic"),
+            font=(UI_FONT, 14, "italic"),
         )
         self.hint_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         self._card_frames.append(self.hint_label)
 
         # ── File-action toolbar ───────────────────────────────────────── #
         toolbar = tk.Frame(self.body, bg=c["bg"])
-        toolbar.pack(fill=tk.X, padx=14, pady=(6, 0))
+        toolbar.pack(fill=tk.X, padx=14, pady=(8, 0))
         self._card_frames.append(toolbar)
 
         btn_style = dict(
             relief=tk.FLAT, bd=0, cursor="hand2",
-            font=(UI_FONT, 12), padx=14, pady=6,
+            font=(UI_FONT, 13), padx=16, pady=8,
         )
         self._toolbar_btns: list[tk.Button] = []
         for text, cmd in [
@@ -340,14 +340,14 @@ class VideoToAudioApp:
             out_row,
             textvariable=self.output_dir,
             state="readonly",
-            font=(UI_FONT, 12),
+            font=(UI_FONT, 13),
         )
-        self.out_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        self.out_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
 
         browse_btn = tk.Button(
             out_row, text="📂  Browse", command=self._browse_output,
             relief=tk.FLAT, bd=0, cursor="hand2",
-            font=(UI_FONT, 12), padx=14, pady=5,
+            font=(UI_FONT, 13), padx=16, pady=7,
         )
         browse_btn.pack(side=tk.LEFT)
         self._toolbar_btns.append(browse_btn)
@@ -370,7 +370,7 @@ class VideoToAudioApp:
 
         def _opt_label(text):
             l = tk.Label(opt_row, text=text, bg=c["card_bg"], fg=c["fg"],
-                         font=(UI_FONT, 12))
+                         font=(UI_FONT, 13))
             l.pack(side=tk.LEFT)
             self._card_frames.append(l)
             return l
@@ -380,9 +380,10 @@ class VideoToAudioApp:
         self.format_combo = ttk.Combobox(
             opt_row, textvariable=self.format_var,
             values=VideoConverter.SUPPORTED_FORMATS,
-            state="readonly", width=7,
+            state="readonly", width=8,
+            font=(UI_FONT, 13),
         )
-        self.format_combo.pack(side=tk.LEFT, padx=(6, 20))
+        self.format_combo.pack(side=tk.LEFT, padx=(8, 24))
         self.format_combo.bind("<<ComboboxSelected>>", self._on_format_change)
 
         _opt_label("Bitrate")
@@ -390,9 +391,10 @@ class VideoToAudioApp:
         self.bitrate_combo = ttk.Combobox(
             opt_row, textvariable=self.bitrate_var,
             values=["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-            state="readonly", width=7,
+            state="readonly", width=8,
+            font=(UI_FONT, 13),
         )
-        self.bitrate_combo.pack(side=tk.LEFT, padx=(6, 20))
+        self.bitrate_combo.pack(side=tk.LEFT, padx=(8, 24))
 
         self.overwrite_var = tk.BooleanVar(value=False)
         self.overwrite_chk = ttk.Checkbutton(
@@ -406,7 +408,7 @@ class VideoToAudioApp:
 
         self.style.configure(
             "Accent.Horizontal.TProgressbar",
-            thickness=10,
+            thickness=14,
             background=c["accent"],
             troughcolor=c["trough"],
         )
@@ -427,21 +429,21 @@ class VideoToAudioApp:
         self.status_label = tk.Label(
             status_row, text="Ready",
             bg=c["card_bg"], fg=c["muted"],
-            font=(UI_FONT, 11),
+            font=(UI_FONT, 13),
         )
         self.status_label.pack(side=tk.LEFT)
 
         self.pct_label = tk.Label(
             status_row, text="",
             bg=c["card_bg"], fg=c["accent"],
-            font=(UI_FONT, 11, "bold"),
+            font=(UI_FONT, 13, "bold"),
         )
         self.pct_label.pack(side=tk.RIGHT)
         self._card_frames.extend([self.status_label, self.pct_label])
 
         # ── Bottom action bar ──────────────────────────────────────────── #
         action_bar = tk.Frame(self.body, bg=c["bg"])
-        action_bar.pack(fill=tk.X, padx=14, pady=(10, 14))
+        action_bar.pack(fill=tk.X, padx=14, pady=(10, 16))
         self._card_frames.append(action_bar)
 
         # Secondary: View Log
@@ -449,7 +451,7 @@ class VideoToAudioApp:
             action_bar, text="📋  View Log",
             command=self._view_log,
             relief=tk.FLAT, bd=0, cursor="hand2",
-            font=(UI_FONT, 12), padx=14, pady=8,
+            font=(UI_FONT, 13), padx=18, pady=10,
         )
         log_btn.pack(side=tk.LEFT)
         self._toolbar_btns.append(log_btn)
@@ -462,8 +464,8 @@ class VideoToAudioApp:
             bg=c["btn_bg"], fg=c["btn_fg"],
             activebackground=c["btn_active"], activeforeground=c["btn_fg"],
             relief=tk.FLAT, bd=0, cursor="hand2",
-            font=(UI_FONT, 13, "bold"),
-            padx=28, pady=9,
+            font=(UI_FONT, 15, "bold"),
+            padx=36, pady=12,
         )
         self.convert_btn.pack(side=tk.RIGHT)
 
