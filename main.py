@@ -23,39 +23,80 @@ def resource_path(relative_path):
 
 
 # ------------------------------------------------------------------ #
-#  Theme colour palettes                                               #
+#  Fonts (resolved once, used everywhere)                              #
 # ------------------------------------------------------------------ #
 
-LIGHT_THEME = {
-    "bg":           "#f0f0f0",
+def _pick(win, mac, lin):
+    if sys.platform == "win32":   return win
+    if sys.platform == "darwin":  return mac
+    return lin
+
+UI_FONT       = _pick("Segoe UI",    "SF Pro Text",    "Helvetica")
+MONO_FONT     = _pick("Courier New", "Menlo",          "Monospace")
+DISPLAY_FONT  = _pick("Segoe UI",    "SF Pro Display", "Helvetica")
+
+
+# ------------------------------------------------------------------ #
+#  Colour palettes                                                     #
+# ------------------------------------------------------------------ #
+
+LIGHT = {
+    # chrome
+    "header_bg":    "#1558d6",
+    "header_fg":    "#ffffff",
+    "header_sub":   "#c2d7ff",
+    # page
+    "bg":           "#f0f2f5",
+    "card_bg":      "#ffffff",
+    "border":       "#dde1e7",
+    # text
     "fg":           "#1a1a1a",
-    "listbox_bg":   "#f5f5f5",
+    "muted":        "#5f6368",
+    "hint":         "#9aa0a6",
+    # widgets
+    "listbox_bg":   "#ffffff",
     "listbox_fg":   "#1a1a1a",
     "entry_bg":     "#ffffff",
-    "select_bg":    "#0078d4",
+    "select_bg":    "#1558d6",
     "select_fg":    "#ffffff",
-    "status_fg":    "#555555",
-    "hint_fg":      "#aaaaaa",
-    "ffmpeg_ok":    "#2e7d32",
-    "ffmpeg_err":   "#c62828",
-    "progress_bar": "#0078d4",
-    "trough":       "#d0d0d0",
+    # progress / accent
+    "accent":       "#1558d6",
+    "trough":       "#e0e3e8",
+    # feedback
+    "ok":           "#188038",
+    "err":          "#c5221f",
+    # primary button
+    "btn_bg":       "#1558d6",
+    "btn_fg":       "#ffffff",
+    "btn_active":   "#1148b8",
+    "btn_dis_bg":   "#c5ccd8",
+    "btn_dis_fg":   "#ffffff",
 }
 
-DARK_THEME = {
-    "bg":           "#1e1e1e",
-    "fg":           "#d4d4d4",
-    "listbox_bg":   "#252526",
-    "listbox_fg":   "#d4d4d4",
-    "entry_bg":     "#3c3c3c",
-    "select_bg":    "#094771",
+DARK = {
+    "header_bg":    "#111827",
+    "header_fg":    "#f1f5f9",
+    "header_sub":   "#6b7280",
+    "bg":           "#1c1c1e",
+    "card_bg":      "#2c2c2e",
+    "border":       "#3a3a3c",
+    "fg":           "#e5e7eb",
+    "muted":        "#9ca3af",
+    "hint":         "#4b5563",
+    "listbox_bg":   "#2c2c2e",
+    "listbox_fg":   "#e5e7eb",
+    "entry_bg":     "#3a3a3c",
+    "select_bg":    "#3b82f6",
     "select_fg":    "#ffffff",
-    "status_fg":    "#9e9e9e",
-    "hint_fg":      "#555555",
-    "ffmpeg_ok":    "#4caf50",
-    "ffmpeg_err":   "#ef5350",
-    "progress_bar": "#1e88e5",
-    "trough":       "#3c3c3c",
+    "accent":       "#3b82f6",
+    "trough":       "#3a3a3c",
+    "ok":           "#4ade80",
+    "err":          "#f87171",
+    "btn_bg":       "#3b82f6",
+    "btn_fg":       "#ffffff",
+    "btn_active":   "#2563eb",
+    "btn_dis_bg":   "#374151",
+    "btn_dis_fg":   "#6b7280",
 }
 
 
@@ -93,11 +134,10 @@ class VideoToAudioApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Video to Audio Converter")
-        self.root.geometry("820x780")
+        self.root.geometry("820x760")
         self.root.resizable(True, True)
-        self.root.minsize(640, 600)
+        self.root.minsize(660, 600)
 
-        # Detect the platform's default theme so we can restore it from dark mode
         if sys.platform == "darwin":
             self._platform_theme = "aqua"
         elif sys.platform == "win32":
@@ -107,7 +147,6 @@ class VideoToAudioApp:
 
         self.style = ttk.Style()
         self.style.theme_use(self._platform_theme)
-        self._configure_fonts()
 
         self.converter = VideoConverter()
         self.files: list[str] = []
@@ -115,297 +154,432 @@ class VideoToAudioApp:
         self.is_converting = False
         self.dark_mode = tk.BooleanVar(value=False)
 
+        # Widgets that need colour updates on theme switch
+        self._header_widgets: list[tk.Widget] = []
+        self._card_frames:    list[tk.Widget] = []
+
         self.root.after(200, self._check_ffmpeg)
         self._build_ui()
         self._apply_theme()
 
     # ------------------------------------------------------------------ #
-    #  Fonts / styles                                                      #
+    #  UI helpers                                                          #
     # ------------------------------------------------------------------ #
 
-    def _configure_fonts(self):
-        if sys.platform == "win32":
-            self.style.configure("TLabel",          font=("Segoe UI", 13))
-            self.style.configure("TButton",         font=("Segoe UI", 15))
-            self.style.configure("TCheckbutton",    font=("Segoe UI", 15))
-            self.style.configure("TLabelframe.Label", font=("Segoe UI", 13, "bold"))
-        elif sys.platform == "darwin":
-            self.style.configure("TLabel",          font=("SF Pro Text", 14))
-            self.style.configure("TButton",         font=("SF Pro Text", 14))
-            self.style.configure("TCheckbutton",    font=("SF Pro Text", 14))
-        else:
-            self.style.configure("TLabel",          font=("Helvetica", 15))
-            self.style.configure("TButton",         font=("Helvetica", 15))
+    def _c(self) -> dict:
+        return DARK if self.dark_mode.get() else LIGHT
+
+    def _label_font(self, size=13, bold=False):
+        weight = "bold" if bold else "normal"
+        return (UI_FONT, size, weight)
+
+    def _card(self, parent, title: str, expand=False, pady=(6, 0)):
+        """A labelled white-card section."""
+        c = self._c()
+        outer = tk.Frame(parent, bg=c["border"], padx=1, pady=1)
+        outer.pack(fill=tk.BOTH, expand=expand, padx=14, pady=pady)
+
+        inner = tk.Frame(outer, bg=c["card_bg"])
+        inner.pack(fill=tk.BOTH, expand=True)
+
+        # Section title row
+        title_row = tk.Frame(inner, bg=c["card_bg"])
+        title_row.pack(fill=tk.X, padx=14, pady=(10, 4))
+        lbl = tk.Label(title_row, text=title, bg=c["card_bg"], fg=c["muted"],
+                       font=(UI_FONT, 11, "bold"))
+        lbl.pack(side=tk.LEFT)
+
+        # Content frame
+        body = tk.Frame(inner, bg=c["card_bg"])
+        body.pack(fill=tk.BOTH, expand=True, padx=14, pady=(0, 12))
+
+        self._card_frames.extend([outer, inner, title_row, lbl, body])
+        return body, outer, lbl
 
     # ------------------------------------------------------------------ #
     #  UI construction                                                     #
     # ------------------------------------------------------------------ #
 
     def _build_ui(self):
-        # ── Title bar ─────────────────────────────────────────────────── #
-        top_frame = ttk.Frame(self.root, padding=(14, 10, 12, 4))
-        top_frame.pack(fill=tk.X)
+        c = LIGHT  # initial colours (theme not applied yet)
 
-        title_font = (
-            ("SF Pro Display", 16, "bold") if sys.platform == "darwin"
-            else ("Segoe UI",   16, "bold") if sys.platform == "win32"
-            else ("Helvetica",  16, "bold")
+        # ── Header banner ─────────────────────────────────────────────── #
+        self.header_frame = tk.Frame(self.root, bg=c["header_bg"], pady=0)
+        self.header_frame.pack(fill=tk.X)
+
+        # Left: icon + title + subtitle
+        left_hdr = tk.Frame(self.header_frame, bg=c["header_bg"])
+        left_hdr.pack(side=tk.LEFT, padx=(18, 0), pady=14)
+
+        self.header_title = tk.Label(
+            left_hdr,
+            text="🎬  Video to Audio Converter",
+            bg=c["header_bg"], fg=c["header_fg"],
+            font=(DISPLAY_FONT, 17, "bold"),
         )
-        ttk.Label(top_frame, text="🎬  Video → Audio Converter", font=title_font).pack(
-            side=tk.LEFT
+        self.header_title.pack(anchor=tk.W)
+
+        self.header_sub = tk.Label(
+            left_hdr,
+            text="Extract audio from any video file",
+            bg=c["header_bg"], fg=c["header_sub"],
+            font=(UI_FONT, 11),
+        )
+        self.header_sub.pack(anchor=tk.W)
+
+        # Right: dark mode toggle + ffmpeg badge
+        right_hdr = tk.Frame(self.header_frame, bg=c["header_bg"])
+        right_hdr.pack(side=tk.RIGHT, padx=(0, 18))
+
+        self.dark_toggle = tk.Button(
+            right_hdr,
+            text="🌙  Dark",
+            command=self._toggle_dark,
+            bg=c["header_bg"], fg=c["header_fg"],
+            activebackground=c["header_bg"], activeforeground=c["header_fg"],
+            relief=tk.FLAT, bd=0, cursor="hand2",
+            font=(UI_FONT, 11),
+            padx=10, pady=6,
+        )
+        self.dark_toggle.pack(side=tk.LEFT, padx=(0, 8))
+
+        self.ffmpeg_status_label = tk.Label(
+            right_hdr, text="",
+            bg=c["header_bg"], fg=c["header_sub"],
+            font=(UI_FONT, 11),
+        )
+        self.ffmpeg_status_label.pack(side=tk.LEFT)
+
+        self._header_widgets = [
+            self.header_frame, left_hdr, right_hdr,
+            self.header_title, self.header_sub,
+            self.dark_toggle, self.ffmpeg_status_label,
+        ]
+
+        # ── Page body ─────────────────────────────────────────────────── #
+        self.body = tk.Frame(self.root, bg=c["bg"])
+        self.body.pack(fill=tk.BOTH, expand=True)
+
+        # ── File list card ────────────────────────────────────────────── #
+        list_body, list_outer, list_title = self._card(
+            self.body, "VIDEO FILES", expand=True, pady=(12, 0)
         )
 
-        # Right side of title bar: dark mode toggle + ffmpeg badge
-        right_bar = ttk.Frame(top_frame)
-        right_bar.pack(side=tk.RIGHT)
+        # Listbox + scrollbars
+        lb_frame = tk.Frame(list_body, bg=LIGHT["card_bg"])
+        lb_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.dark_btn = ttk.Checkbutton(
-            right_bar,
-            text="🌙 Dark",
-            variable=self.dark_mode,
-            command=self._apply_theme,
-        )
-        self.dark_btn.pack(side=tk.LEFT, padx=(0, 12))
-
-        self.ffmpeg_status_label = ttk.Label(right_bar, text="", foreground="#888888")
-        self.ffmpeg_status_label.pack(side=tk.LEFT, padx=4)
-
-        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=14)
-
-        # ── File list ─────────────────────────────────────────────────── #
-        list_frame = ttk.LabelFrame(self.root, text="Video Files", padding=(14, 6))
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(9, 4))
-
-        scroll_y = ttk.Scrollbar(list_frame, orient=tk.VERTICAL)
-        scroll_x = ttk.Scrollbar(list_frame, orient=tk.HORIZONTAL)
-
-        list_font = (
-            ("Courier New", 13) if sys.platform == "win32"
-            else ("Menlo",      14) if sys.platform == "darwin"
-            else ("Monospace",  14)
-        )
+        scroll_y = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL)
+        scroll_x = ttk.Scrollbar(lb_frame, orient=tk.HORIZONTAL)
 
         self.file_listbox = tk.Listbox(
-            list_frame,
+            lb_frame,
             selectmode=tk.EXTENDED,
             yscrollcommand=scroll_y.set,
             xscrollcommand=scroll_x.set,
-            activestyle="dotbox",
-            font=list_font,
-            bg="#f5f5f5",
-            fg="#1a1a1a",
-            bd=0,
-            highlightthickness=1,
-            highlightcolor="#aaaaaa",
+            activestyle="none",
+            font=(MONO_FONT, 12),
+            bg=c["listbox_bg"], fg=c["listbox_fg"],
+            selectbackground=c["select_bg"], selectforeground=c["select_fg"],
+            bd=0, highlightthickness=0,
             relief=tk.FLAT,
         )
         scroll_y.config(command=self.file_listbox.yview)
         scroll_x.config(command=self.file_listbox.xview)
 
-        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_y.pack(side=tk.RIGHT,  fill=tk.Y)
         scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
         self.file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Drag-and-drop support
+        self._card_frames.append(lb_frame)
+
         if HAS_DND:
             self.file_listbox.drop_target_register(DND_FILES)
             self.file_listbox.dnd_bind("<<Drop>>", self._on_drop)
 
         hint_text = (
-            "Drop files here  or  click  ➕ Add Files" if HAS_DND
-            else "Click  ➕ Add Files  to get started"
+            "Drop files here  ·  or click  ➕ Add Files  below" if HAS_DND
+            else "Click  ➕ Add Files  below to get started"
         )
-        self.hint_label = ttk.Label(
-            list_frame,
+        self.hint_label = tk.Label(
+            lb_frame,
             text=hint_text,
-            foreground="#aaaaaa",
-            font=(
-                ("Segoe UI",   12, "italic") if sys.platform == "win32"
-                else ("Helvetica", 12, "italic")
-            ),
+            bg=c["card_bg"], fg=c["hint"],
+            font=(UI_FONT, 12, "italic"),
         )
         self.hint_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        self._card_frames.append(self.hint_label)
 
-        # ── File-action buttons ───────────────────────────────────────── #
-        btn_frame = ttk.Frame(self.root, padding=(14, 3))
-        btn_frame.pack(fill=tk.X)
+        # ── File-action toolbar ───────────────────────────────────────── #
+        toolbar = tk.Frame(self.body, bg=c["bg"])
+        toolbar.pack(fill=tk.X, padx=14, pady=(6, 0))
+        self._card_frames.append(toolbar)
 
-        ttk.Button(btn_frame, text="➕  Add Files",        command=self._add_files,       width=14).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(btn_frame, text="🗑  Remove Selected", command=self._remove_selected,  width=18).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(btn_frame, text="✖  Clear All",        command=self._clear_all,        width=13).pack(side=tk.LEFT)
+        btn_style = dict(
+            relief=tk.FLAT, bd=0, cursor="hand2",
+            font=(UI_FONT, 12), padx=14, pady=6,
+        )
+        self._toolbar_btns: list[tk.Button] = []
+        for text, cmd in [
+            ("➕  Add Files",       self._add_files),
+            ("🗑  Remove Selected", self._remove_selected),
+            ("✖  Clear All",        self._clear_all),
+        ]:
+            b = tk.Button(toolbar, text=text, command=cmd, **btn_style)
+            b.pack(side=tk.LEFT, padx=(0, 6))
+            self._toolbar_btns.append(b)
 
-        # ── Output directory ──────────────────────────────────────────── #
-        out_frame = ttk.LabelFrame(self.root, text="Output Directory", padding=(12, 6))
-        out_frame.pack(fill=tk.X, padx=14, pady=(6, 4))
+        # ── Output directory card ──────────────────────────────────────── #
+        out_body, _, _ = self._card(self.body, "OUTPUT DIRECTORY", pady=(8, 0))
 
-        out_row = ttk.Frame(out_frame)
-        out_row.pack(fill=tk.X)
+        out_row = tk.Frame(out_body, bg=c["card_bg"])
+        out_row.pack(fill=tk.X, pady=(0, 6))
+        self._card_frames.append(out_row)
 
         self.out_entry = ttk.Entry(
             out_row,
             textvariable=self.output_dir,
             state="readonly",
-            font=("Segoe UI", 12) if sys.platform == "win32" else ("Helvetica", 12),
+            font=(UI_FONT, 12),
         )
         self.out_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
 
-        ttk.Button(out_row, text="📂  Browse", command=self._browse_output, width=13).pack(side=tk.LEFT)
+        browse_btn = tk.Button(
+            out_row, text="📂  Browse", command=self._browse_output,
+            relief=tk.FLAT, bd=0, cursor="hand2",
+            font=(UI_FONT, 12), padx=14, pady=5,
+        )
+        browse_btn.pack(side=tk.LEFT)
+        self._toolbar_btns.append(browse_btn)
 
         self.same_dir_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            out_frame,
+        self.same_dir_chk = ttk.Checkbutton(
+            out_body,
             text="Save next to original files",
             variable=self.same_dir_var,
             command=self._toggle_output_dir,
-        ).pack(anchor=tk.W, pady=(4, 0))
+        )
+        self.same_dir_chk.pack(anchor=tk.W)
         self._toggle_output_dir()
 
-        # ── Options ───────────────────────────────────────────────────── #
-        opt_frame = ttk.LabelFrame(self.root, text="Options", padding=(12, 6))
-        opt_frame.pack(fill=tk.X, padx=12, pady=(0, 6))
-
-        opt_row = ttk.Frame(opt_frame)
+        # ── Options card ───────────────────────────────────────────────── #
+        opt_body, _, _ = self._card(self.body, "OPTIONS", pady=(8, 0))
+        opt_row = tk.Frame(opt_body, bg=c["card_bg"])
         opt_row.pack(fill=tk.X)
+        self._card_frames.append(opt_row)
 
-        ttk.Label(opt_row, text="Output format:").pack(side=tk.LEFT)
+        def _opt_label(text):
+            l = tk.Label(opt_row, text=text, bg=c["card_bg"], fg=c["fg"],
+                         font=(UI_FONT, 12))
+            l.pack(side=tk.LEFT)
+            self._card_frames.append(l)
+            return l
+
+        _opt_label("Format")
         self.format_var = tk.StringVar(value="m4a")
         self.format_combo = ttk.Combobox(
-            opt_row,
-            textvariable=self.format_var,
+            opt_row, textvariable=self.format_var,
             values=VideoConverter.SUPPORTED_FORMATS,
-            state="readonly",
-            width=6,
+            state="readonly", width=7,
         )
-        self.format_combo.pack(side=tk.LEFT, padx=(8, 24))
+        self.format_combo.pack(side=tk.LEFT, padx=(6, 20))
         self.format_combo.bind("<<ComboboxSelected>>", self._on_format_change)
 
-        ttk.Label(opt_row, text="Audio bitrate:").pack(side=tk.LEFT)
+        _opt_label("Bitrate")
         self.bitrate_var = tk.StringVar(value="192k")
         self.bitrate_combo = ttk.Combobox(
-            opt_row,
-            textvariable=self.bitrate_var,
+            opt_row, textvariable=self.bitrate_var,
             values=["64k", "96k", "128k", "160k", "192k", "256k", "320k"],
-            state="readonly",
-            width=7,
+            state="readonly", width=7,
         )
-        self.bitrate_combo.pack(side=tk.LEFT, padx=(8, 24))
+        self.bitrate_combo.pack(side=tk.LEFT, padx=(6, 20))
 
         self.overwrite_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            opt_row,
-            text="Overwrite existing files",
+        self.overwrite_chk = ttk.Checkbutton(
+            opt_row, text="Overwrite existing files",
             variable=self.overwrite_var,
-        ).pack(side=tk.LEFT)
+        )
+        self.overwrite_chk.pack(side=tk.LEFT)
 
-        # ── Progress ──────────────────────────────────────────────────── #
-        prog_frame = ttk.Frame(self.root, padding=(14, 0, 12, 0))
-        prog_frame.pack(fill=tk.X)
+        # ── Progress card ──────────────────────────────────────────────── #
+        prog_body, _, _ = self._card(self.body, "PROGRESS", pady=(8, 0))
 
+        self.style.configure(
+            "Accent.Horizontal.TProgressbar",
+            thickness=10,
+            background=c["accent"],
+            troughcolor=c["trough"],
+        )
         self.progress_var = tk.DoubleVar(value=0)
         self.progress_bar = ttk.Progressbar(
-            prog_frame,
+            prog_body,
             variable=self.progress_var,
             maximum=100,
             mode="determinate",
+            style="Accent.Horizontal.TProgressbar",
         )
-        self.progress_bar.pack(fill=tk.X, pady=(0, 3))
+        self.progress_bar.pack(fill=tk.X, pady=(0, 6))
 
-        self.status_label = ttk.Label(prog_frame, text="Ready", foreground="#555555")
-        self.status_label.pack(anchor=tk.W)
+        status_row = tk.Frame(prog_body, bg=c["card_bg"])
+        status_row.pack(fill=tk.X)
+        self._card_frames.append(status_row)
 
-        # ── Bottom buttons ────────────────────────────────────────────── #
-        bottom_frame = ttk.Frame(self.root, padding=(14, 4, 12, 14))
-        bottom_frame.pack(fill=tk.X)
+        self.status_label = tk.Label(
+            status_row, text="Ready",
+            bg=c["card_bg"], fg=c["muted"],
+            font=(UI_FONT, 11),
+        )
+        self.status_label.pack(side=tk.LEFT)
 
-        self.convert_btn = ttk.Button(
-            bottom_frame,
+        self.pct_label = tk.Label(
+            status_row, text="",
+            bg=c["card_bg"], fg=c["accent"],
+            font=(UI_FONT, 11, "bold"),
+        )
+        self.pct_label.pack(side=tk.RIGHT)
+        self._card_frames.extend([self.status_label, self.pct_label])
+
+        # ── Bottom action bar ──────────────────────────────────────────── #
+        action_bar = tk.Frame(self.body, bg=c["bg"])
+        action_bar.pack(fill=tk.X, padx=14, pady=(10, 14))
+        self._card_frames.append(action_bar)
+
+        # Secondary: View Log
+        log_btn = tk.Button(
+            action_bar, text="📋  View Log",
+            command=self._view_log,
+            relief=tk.FLAT, bd=0, cursor="hand2",
+            font=(UI_FONT, 12), padx=14, pady=8,
+        )
+        log_btn.pack(side=tk.LEFT)
+        self._toolbar_btns.append(log_btn)
+
+        # Primary: Convert
+        self.convert_btn = tk.Button(
+            action_bar,
             text="▶  Convert to M4A",
             command=self._start_conversion,
-            width=22,
+            bg=c["btn_bg"], fg=c["btn_fg"],
+            activebackground=c["btn_active"], activeforeground=c["btn_fg"],
+            relief=tk.FLAT, bd=0, cursor="hand2",
+            font=(UI_FONT, 13, "bold"),
+            padx=28, pady=9,
         )
         self.convert_btn.pack(side=tk.RIGHT)
-
-        ttk.Button(
-            bottom_frame,
-            text="📋  View Log",
-            command=self._view_log,
-            width=14,
-        ).pack(side=tk.RIGHT, padx=(0, 8))
 
     # ------------------------------------------------------------------ #
     #  Theme                                                               #
     # ------------------------------------------------------------------ #
 
+    def _toggle_dark(self):
+        self.dark_mode.set(not self.dark_mode.get())
+        self._apply_theme()
+
     def _apply_theme(self):
-        c = DARK_THEME if self.dark_mode.get() else LIGHT_THEME
+        c = self._c()
+        is_dark = self.dark_mode.get()
 
-        # "clam" is the most customisable theme; use it for dark mode.
-        # Restore the platform theme when switching back to light.
-        if self.dark_mode.get():
-            self.style.theme_use("clam")
-        else:
-            self.style.theme_use(self._platform_theme)
-        self._configure_fonts()  # re-apply fonts after theme switch
+        # Update dark toggle label
+        self.dark_toggle.config(text="☀️  Light" if is_dark else "🌙  Dark")
 
-        # ttk-wide overrides
-        self.style.configure(".",                   background=c["bg"], foreground=c["fg"])
-        self.style.configure("TFrame",              background=c["bg"])
-        self.style.configure("TLabel",              background=c["bg"], foreground=c["fg"])
-        self.style.configure("TLabelframe",         background=c["bg"])
-        self.style.configure("TLabelframe.Label",   background=c["bg"], foreground=c["fg"])
-        self.style.configure("TCheckbutton",        background=c["bg"], foreground=c["fg"])
-        self.style.configure("TCombobox",           fieldbackground=c["entry_bg"], foreground=c["fg"], background=c["bg"])
-        self.style.configure("TEntry",              fieldbackground=c["entry_bg"], foreground=c["fg"])
-        self.style.configure("TScrollbar",          background=c["bg"], troughcolor=c["trough"])
-        self.style.configure("Horizontal.TProgressbar",
-                             background=c["progress_bar"], troughcolor=c["trough"])
+        # ttk theme
+        self.style.theme_use("clam" if is_dark else self._platform_theme)
 
-        if self.dark_mode.get():
-            self.style.configure("TButton",
-                                 background="#3c3c3c", foreground=c["fg"], bordercolor="#555555")
-            self.style.map("TButton",
-                           background=[("active", "#5a5a5a"), ("disabled", "#2a2a2a")],
-                           foreground=[("active", c["fg"]), ("disabled", "#666666")])
+        # ttk style overrides
+        self.style.configure(".",
+            background=c["card_bg"], foreground=c["fg"])
+        self.style.configure("TFrame",     background=c["card_bg"])
+        self.style.configure("TLabel",     background=c["card_bg"], foreground=c["fg"])
+        self.style.configure("TCheckbutton", background=c["card_bg"], foreground=c["fg"])
+        self.style.configure("TCombobox",
+            fieldbackground=c["entry_bg"], foreground=c["fg"], background=c["card_bg"])
+        self.style.configure("TEntry",
+            fieldbackground=c["entry_bg"], foreground=c["fg"])
+        self.style.configure("TScrollbar",
+            background=c["card_bg"], troughcolor=c["trough"], arrowcolor=c["muted"])
+        self.style.configure("Accent.Horizontal.TProgressbar",
+            background=c["accent"], troughcolor=c["trough"], thickness=10)
+
+        if is_dark:
             self.style.map("TCheckbutton",
-                           background=[("active", c["bg"])],
-                           foreground=[("active", c["fg"])])
-        else:
-            self.style.map("TButton",     background=[], foreground=[])
-            self.style.map("TCheckbutton", background=[], foreground=[])
+                background=[("active", c["card_bg"])],
+                foreground=[("active", c["fg"])])
+            self.style.map("TCombobox",
+                fieldbackground=[("readonly", c["entry_bg"])],
+                foreground=[("readonly", c["fg"])])
 
+        # Root + body
         self.root.configure(bg=c["bg"])
+        self.body.configure(bg=c["bg"])
 
-        self.file_listbox.configure(
-            bg=c["listbox_bg"],
-            fg=c["listbox_fg"],
-            selectbackground=c["select_bg"],
-            selectforeground=c["select_fg"],
+        # Header
+        for w in self._header_widgets:
+            w.configure(bg=c["header_bg"])
+        self.header_title.configure(fg=c["header_fg"])
+        self.header_sub.configure(fg=c["header_sub"])
+        self.dark_toggle.configure(
+            fg=c["header_fg"],
+            activebackground=c["header_bg"], activeforeground=c["header_fg"],
         )
-
-        self.status_label.config(foreground=c["status_fg"])
-        self.hint_label.config(foreground=c["hint_fg"])
-
-        # Preserve correct colour on the ffmpeg badge
+        # Re-apply ffmpeg badge colour
         txt = self.ffmpeg_status_label.cget("text")
-        if "✅" in txt or "ready" in txt.lower():
-            self.ffmpeg_status_label.config(foreground=c["ffmpeg_ok"])
-        elif "⚠" in txt or "not found" in txt.lower():
-            self.ffmpeg_status_label.config(foreground=c["ffmpeg_err"])
+        if "✅" in txt:
+            self.ffmpeg_status_label.configure(fg=c["ok"])
+        elif "⚠" in txt:
+            self.ffmpeg_status_label.configure(fg=c["err"])
+        else:
+            self.ffmpeg_status_label.configure(fg=c["header_sub"])
+
+        # Card frames / labels
+        for w in self._card_frames:
+            try:
+                w.configure(bg=c["card_bg"])
+                if isinstance(w, tk.Label):
+                    # hint and status labels keep their own fg, set below
+                    pass
+            except tk.TclError:
+                pass
+
+        # Specific label foregrounds
+        self.hint_label.configure(fg=c["hint"])
+        self.status_label.configure(fg=c["muted"])
+        self.pct_label.configure(fg=c["accent"])
+
+        # Toolbar / secondary buttons
+        for btn in self._toolbar_btns:
+            btn.configure(
+                bg=c["card_bg"], fg=c["fg"],
+                activebackground=c["border"], activeforeground=c["fg"],
+            )
+
+        # Convert button (primary — keeps its own colour)
+        if self.is_converting:
+            self.convert_btn.configure(
+                bg=c["btn_dis_bg"], fg=c["btn_dis_fg"],
+                activebackground=c["btn_dis_bg"],
+            )
+        else:
+            self.convert_btn.configure(
+                bg=c["btn_bg"], fg=c["btn_fg"],
+                activebackground=c["btn_active"], activeforeground=c["btn_fg"],
+            )
+
+        # Listbox
+        self.file_listbox.configure(
+            bg=c["listbox_bg"], fg=c["listbox_fg"],
+            selectbackground=c["select_bg"], selectforeground=c["select_fg"],
+        )
 
     # ------------------------------------------------------------------ #
     #  ffmpeg check                                                        #
     # ------------------------------------------------------------------ #
 
     def _check_ffmpeg(self):
-        c = DARK_THEME if self.dark_mode.get() else LIGHT_THEME
+        c = self._c()
         if self.converter.is_ffmpeg_available():
-            self.ffmpeg_status_label.config(
-                text="✅ ffmpeg ready", foreground=c["ffmpeg_ok"]
-            )
+            self.ffmpeg_status_label.configure(text="✅ ffmpeg ready", fg=c["ok"])
         else:
-            self.ffmpeg_status_label.config(
-                text="⚠️ ffmpeg not found", foreground=c["ffmpeg_err"]
-            )
+            self.ffmpeg_status_label.configure(text="⚠️ ffmpeg not found", fg=c["err"])
             msg = "ffmpeg was not found on this system.\n\nPlease install ffmpeg:\n"
             if sys.platform == "win32":
                 msg += (
@@ -427,12 +601,11 @@ class VideoToAudioApp:
 
     def _on_format_change(self, _event=None):
         fmt = self.format_var.get()
-        self.convert_btn.config(text=f"▶  Convert to {fmt.upper()}")
-        # WAV and FLAC are lossless — bitrate doesn't apply
+        self.convert_btn.configure(text=f"▶  Convert to {fmt.upper()}")
         if fmt in ("wav", "flac"):
-            self.bitrate_combo.config(state="disabled")
+            self.bitrate_combo.configure(state="disabled")
         else:
-            self.bitrate_combo.config(state="readonly")
+            self.bitrate_combo.configure(state="readonly")
 
     # ------------------------------------------------------------------ #
     #  File-list callbacks                                                 #
@@ -442,21 +615,16 @@ class VideoToAudioApp:
         paths = filedialog.askopenfilenames(
             title="Select Video Files",
             filetypes=[
-                (
-                    "Video files",
-                    "*.mp4 *.mov *.avi *.mkv *.wmv *.flv *.webm *.m4v "
-                    "*.mpeg *.mpg *.ts *.3gp",
-                ),
+                ("Video files",
+                 "*.mp4 *.mov *.avi *.mkv *.wmv *.flv *.webm *.m4v "
+                 "*.mpeg *.mpg *.ts *.3gp"),
                 ("All files", "*.*"),
             ],
         )
         self._add_paths(list(paths))
 
     def _on_drop(self, event):
-        """Handle files dropped onto the listbox."""
-        paths = _parse_dnd_paths(event.data)
-        # Accept any file — validation happens inside the converter
-        self._add_paths(paths)
+        self._add_paths(_parse_dnd_paths(event.data))
 
     def _add_paths(self, paths: list[str]):
         added = 0
@@ -467,7 +635,7 @@ class VideoToAudioApp:
                 added += 1
         if added:
             self._refresh_hint()
-            self.status_label.config(text=f"{len(self.files)} file(s) queued")
+            self.status_label.configure(text=f"{len(self.files)} file(s) queued")
 
     def _remove_selected(self):
         for idx in reversed(self.file_listbox.curselection()):
@@ -479,7 +647,8 @@ class VideoToAudioApp:
         self.file_listbox.delete(0, tk.END)
         self.files.clear()
         self._refresh_hint()
-        self.status_label.config(text="Ready")
+        self.status_label.configure(text="Ready")
+        self.pct_label.configure(text="")
         self.progress_var.set(0)
 
     def _refresh_hint(self):
@@ -498,10 +667,9 @@ class VideoToAudioApp:
             self.output_dir.set(directory)
 
     def _toggle_output_dir(self):
-        if self.same_dir_var.get():
-            self.out_entry.config(state="disabled")
-        else:
-            self.out_entry.config(state="readonly")
+        self.out_entry.configure(
+            state="disabled" if self.same_dir_var.get() else "readonly"
+        )
 
     # ------------------------------------------------------------------ #
     #  Conversion                                                          #
@@ -510,15 +678,12 @@ class VideoToAudioApp:
     def _start_conversion(self):
         if self.is_converting:
             return
-
         if not self.files:
             messagebox.showwarning("No Files", "Please add at least one video file.")
             return
-
         if not self.same_dir_var.get() and not self.output_dir.get():
             messagebox.showwarning("No Output Directory", "Please choose an output directory.")
             return
-
         if not self.converter.is_ffmpeg_available():
             messagebox.showerror(
                 "ffmpeg Not Found",
@@ -527,9 +692,15 @@ class VideoToAudioApp:
             )
             return
 
+        c = self._c()
         self.is_converting = True
-        self.convert_btn.config(state=tk.DISABLED, text="⏳  Converting…")
+        self.convert_btn.configure(
+            state=tk.DISABLED, text="⏳  Converting…",
+            bg=c["btn_dis_bg"], fg=c["btn_dis_fg"],
+            activebackground=c["btn_dis_bg"],
+        )
         self.progress_var.set(0)
+        self.pct_label.configure(text="0%")
 
         threading.Thread(target=self._run_conversion, daemon=True).start()
 
@@ -546,8 +717,7 @@ class VideoToAudioApp:
             self._update_status(f"Converting {i + 1}/{total}: {basename}")
 
             out_dir = (
-                os.path.dirname(input_path)
-                if self.same_dir_var.get()
+                os.path.dirname(input_path) if self.same_dir_var.get()
                 else self.output_dir.get()
             )
             stem = os.path.splitext(basename)[0]
@@ -567,8 +737,7 @@ class VideoToAudioApp:
                 return cb
 
             ok, error_msg = self.converter.convert(
-                input_path,
-                output_path,
+                input_path, output_path,
                 bitrate=self.bitrate_var.get(),
                 fmt=fmt,
                 progress_callback=_make_cb(i),
@@ -600,35 +769,29 @@ class VideoToAudioApp:
                 for entry in entries:
                     f.write(f"[{ts}] {entry}\n")
         except Exception:
-            pass  # non-critical
+            pass
 
     def _view_log(self):
         if not os.path.exists(self.LOG_FILE):
             messagebox.showinfo("No Log", "No conversion history found yet.")
             return
 
-        c = DARK_THEME if self.dark_mode.get() else LIGHT_THEME
-
+        c = self._c()
         win = tk.Toplevel(self.root)
         win.title("Conversion History")
         win.geometry("820x500")
         win.configure(bg=c["bg"])
 
-        text_frame = ttk.Frame(win, padding=8)
+        text_frame = tk.Frame(win, bg=c["bg"], padx=12, pady=12)
         text_frame.pack(fill=tk.BOTH, expand=True)
 
         scroll = ttk.Scrollbar(text_frame, orient=tk.VERTICAL)
-        log_font = (
-            ("Courier New", 11) if sys.platform == "win32"
-            else ("Menlo",      12) if sys.platform == "darwin"
-            else ("Monospace",  11)
-        )
         text = tk.Text(
             text_frame,
             wrap=tk.NONE,
-            bg=c["listbox_bg"],
-            fg=c["listbox_fg"],
-            font=log_font,
+            bg=c["listbox_bg"], fg=c["listbox_fg"],
+            font=(MONO_FONT, 11),
+            relief=tk.FLAT, bd=0,
             yscrollcommand=scroll.set,
         )
         scroll.config(command=text.yview)
@@ -641,18 +804,22 @@ class VideoToAudioApp:
         except Exception as e:
             text.insert(tk.END, f"Error reading log: {e}")
 
-        text.config(state=tk.DISABLED)
+        text.configure(state=tk.DISABLED)
         text.see(tk.END)
 
-        btn_row = ttk.Frame(win, padding=(0, 4, 0, 8))
+        btn_row = tk.Frame(win, bg=c["bg"], pady=8)
         btn_row.pack()
-        ttk.Button(btn_row, text="Close", command=win.destroy, width=12).pack(side=tk.LEFT, padx=4)
-        ttk.Button(
-            btn_row,
-            text="Clear Log",
-            command=lambda: self._clear_log(win),
-            width=12,
-        ).pack(side=tk.LEFT, padx=4)
+        for lbl, cmd in [
+            ("Close",     win.destroy),
+            ("Clear Log", lambda: self._clear_log(win)),
+        ]:
+            tk.Button(
+                btn_row, text=lbl, command=cmd,
+                bg=c["card_bg"], fg=c["fg"],
+                activebackground=c["border"], activeforeground=c["fg"],
+                relief=tk.FLAT, bd=0, cursor="hand2",
+                font=(UI_FONT, 12), padx=16, pady=6,
+            ).pack(side=tk.LEFT, padx=6)
 
     def _clear_log(self, parent_window=None):
         if not messagebox.askyesno("Clear Log", "Delete all conversion history?"):
@@ -670,18 +837,28 @@ class VideoToAudioApp:
     # ------------------------------------------------------------------ #
 
     def _update_status(self, msg: str):
-        self.root.after(0, lambda: self.status_label.config(text=msg))
+        self.root.after(0, lambda: self.status_label.configure(text=msg))
 
     def _update_progress(self, value: float):
-        self.root.after(0, lambda: self.progress_var.set(value))
+        def _do():
+            self.progress_var.set(value)
+            self.pct_label.configure(text=f"{int(value)}%")
+        self.root.after(0, _do)
 
     def _finish_conversion(
         self, success: int, skipped: int, errors: list, total: int, fmt: str
     ):
         def _do():
+            c = self._c()
             self.is_converting = False
-            self.convert_btn.config(state=tk.NORMAL, text=f"▶  Convert to {fmt.upper()}")
+            self.convert_btn.configure(
+                state=tk.NORMAL,
+                text=f"▶  Convert to {fmt.upper()}",
+                bg=c["btn_bg"], fg=c["btn_fg"],
+                activebackground=c["btn_active"], activeforeground=c["btn_fg"],
+            )
             self.progress_var.set(100)
+            self.pct_label.configure(text="100%")
 
             failed = len(errors) - skipped
 
@@ -700,7 +877,7 @@ class VideoToAudioApp:
                     f"✅  Successfully converted {success} file(s) to {fmt.upper()}.",
                 )
 
-            self.status_label.config(
+            self.status_label.configure(
                 text=f"Done — {success} converted, {skipped} skipped, {failed} failed"
             )
 
@@ -717,7 +894,6 @@ def main():
     else:
         root = tk.Tk()
 
-    # Windows: tell Windows this is a DPI-aware application
     if sys.platform == "win32":
         try:
             from ctypes import windll
